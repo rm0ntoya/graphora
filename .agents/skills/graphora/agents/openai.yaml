@@ -1,0 +1,4 @@
+interface:
+  display_name: "Graphora"
+  short_description: "Memoria de projetos e grafos locais em 3D"
+  default_prompt: "Use $graphora para analisar este projeto e abrir seu painel 3D local."
