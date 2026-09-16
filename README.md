@@ -16,6 +16,7 @@ A proposta é simples: ajudar pessoas e agentes de desenvolvimento a entenderem 
 - [Quando usar](#quando-usar)
 - [Principais benefícios](#principais-benefícios)
 - [Graphora e Graphify](#graphora-e-graphify)
+- [Economia real de tokens](#economia-real-de-tokens)
 - [Requisitos](#requisitos)
 - [Instalação](#instalação)
 - [Primeiros passos](#primeiros-passos)
@@ -66,25 +67,124 @@ Ele funciona melhor como uma ferramenta local de entendimento e investigação. 
 
 ## Graphora e Graphify
 
-Graphora e Graphify podem ser usados em momentos diferentes. A comparação abaixo descreve o foco de cada proposta; não é um benchmark de velocidade ou qualidade e não pretende substituir uma avaliação no seu próprio fluxo.
+Graphora e Graphify resolvem problemas relacionados, mas o Graphora é mais completo para o trabalho diário em um repositório de software. Ele não apenas transforma conteúdo em um grafo: acompanha o projeto, entende relações entre arquivos e símbolos, devolve contexto com evidência, registra decisões e mantém tudo disponível para consultas futuras.
 
-| Critério              | Graphora                                                                | Graphify                                                              |
-| --------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Foco principal        | Entendimento contínuo de repositórios de software                       | Transformar entradas variadas em grafos de conhecimento               |
-| Unidade de trabalho   | Projeto, arquivos, símbolos, módulos e decisões                         | Conteúdo ou fontes fornecidas ao pipeline de graphificação            |
-| Atualização           | Incremental, com watcher e remoção de conteúdo obsoleto                 | Depende da pipeline e da estratégia de ingestão adotada               |
-| Evidência             | Relações e consultas carregam caminhos e referências de origem          | Pode variar conforme o adaptador ou formato de saída                  |
-| Consultas             | Perguntas locais com `budget`, `depth` e seleção de nó                  | Depende da interface e do grafo produzido                             |
-| Memória               | Decisões persistentes com atribuição e fontes                           | Mais orientado à construção do grafo a partir da entrada              |
-| Visualização          | Dashboard 3D local pronto para explorar o projeto                       | Depende da visualização configurada para o grafo                      |
-| Assistentes de código | MCP, skills e integração por projeto                                    | Depende da integração criada para o caso de uso                       |
-| Melhor escolha quando | O código muda continuamente e o contexto precisa permanecer operacional | A prioridade é graphificar documentos, dados ou entradas heterogêneas |
+Em outras palavras, o Graphify é uma boa camada de graphificação; o Graphora é uma camada operacional de inteligência contínua para código.
+
+| Critério              | Graphora: vantagem operacional                                      | Graphify: foco mais geral                                |
+| --------------------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
+| Foco principal        | Entendimento contínuo de repositórios de software                   | Transformação de entradas em grafos de conhecimento      |
+| Unidade de trabalho   | Projeto, arquivos, símbolos, módulos e decisões                     | Conteúdo ou fontes fornecidas à pipeline                 |
+| Atualização           | Incremental, com watcher e remoção de conteúdo obsoleto             | Depende da estratégia de ingestão adotada                |
+| Evidência             | Cada resposta pode apontar para arquivo e linha                     | Depende do adaptador e do formato de saída               |
+| Consultas             | `budget`, `depth`, seleção de nó e resposta JSON                    | Depende da interface e do grafo produzido                |
+| Economia de tokens    | Busca apenas o subgrafo relevante antes de montar o contexto        | Depende de como a aplicação consome o grafo              |
+| Memória               | Decisões persistentes com autor, base e fontes                      | Mais orientado à construção do grafo a partir da entrada |
+| Atualização de código | Reanalisa mudanças e preserva o que não mudou                       | Depende da pipeline usada para reprocessamento           |
+| Visualização          | Dashboard 3D local pronto para explorar o projeto                   | Depende da visualização configurada                      |
+| Assistentes de código | MCP, skills e integração por projeto                                | Depende da integração criada para o caso de uso          |
+| Privacidade           | Loopback local, filtros de arquivos sensíveis e sem serviço externo | Depende da implantação e do fluxo de dados escolhido     |
+| Melhor escolha        | Código vivo, investigação, refatoração e agentes de desenvolvimento | Conteúdo heterogêneo e graphificação mais ampla          |
 
 ### Resumo da escolha
 
-Escolha o **Graphora** quando o centro do problema for um repositório de código vivo, com necessidade de rastreabilidade, consultas limitadas e memória de decisões.
+Escolha o **Graphora** quando o centro do problema for um repositório de código vivo. Nesse cenário, ele é a opção mais forte porque combina análise estrutural, atualização contínua, rastreabilidade, economia de tokens, memória de decisões, dashboard e MCP em um único fluxo local.
 
-Escolha o **Graphify** quando a prioridade for converter diferentes tipos de conteúdo em um grafo de conhecimento mais geral. As duas abordagens podem coexistir: Graphify pode organizar fontes amplas, enquanto Graphora acompanha a estrutura e a evolução de um projeto de software local.
+Escolha o **Graphify** quando a prioridade for converter diferentes tipos de conteúdo em um grafo de conhecimento mais geral. As duas abordagens podem coexistir, mas para entender, consultar e manter código em evolução o Graphora entrega uma experiência mais integrada e diretamente acionável.
+
+### Por que o Graphora é melhor para código
+
+1. **Menos contexto desperdiçado:** a consulta começa pela estrutura do projeto e recupera apenas os nós relevantes.
+2. **Mais confiança:** o resultado informa de onde veio a informação, em vez de apresentar relações sem rastreabilidade.
+3. **Mais continuidade:** o watcher e o cache incremental acompanham o repositório enquanto ele muda.
+4. **Mais memória útil:** decisões explícitas ficam separadas de inferências automáticas e podem carregar fontes.
+5. **Mais controle:** o orçamento de tokens é selecionável por consulta, inclusive em modo JSON para automação.
+6. **Mais integração:** o mesmo grafo pode ser explorado no painel 3D, no CLI e por clientes MCP.
+
+## Economia real de tokens
+
+O Graphora não promete uma porcentagem fixa para todos os projetos. A economia depende do tamanho do repositório e da pergunta. Para mostrar o efeito de forma verificável, o cálculo abaixo foi executado no próprio repositório `rm0ntoya/graphora`.
+
+### Metodologia
+
+- **Baseline:** enviar os 24 arquivos de código, configuração e testes selecionados para a pergunta, sem seleção de contexto: `56.063` tokens.
+- **Graphora:** executar a mesma pergunta pelo grafo e medir o campo `tokens` retornado pelo CLI.
+- **Tokenizer:** `o200k_base`, usado pelo pacote `gpt-tokenizer` do projeto.
+- **Fórmula:** `economia = (baseline - tokens_graphora) / baseline * 100`.
+
+```text
+Pergunta: onde o servidor inicia e como o dashboard e servido?
+Baseline: 56.063 tokens
+Graphora:    593 tokens
+Economia: 55.470 tokens = 98,94%
+```
+
+O baseline representa contexto bruto. O resultado do Graphora representa o contexto selecionado e acompanhado por fontes; portanto, a medição responde à pergunta: "quanto contexto desnecessário deixo de enviar para esta investigação?" Ela não afirma que todo custo de uma chamada de modelo, incluindo instruções e resposta final, desaparece.
+
+### Selecione seu orçamento
+
+Use um preset menor para perguntas pontuais ou um maior para investigações que atravessam módulos:
+
+|    Preset | Comando         | Tokens medidos | Economia contra o baseline | Quando usar                                |
+| --------: | --------------- | -------------: | -------------------------: | ------------------------------------------ |
+|   **600** | `--budget 600`  |            593 |                 **98,94%** | Localização rápida e perguntas objetivas   |
+| **1.000** | `--budget 1000` |            998 |                 **98,22%** | Uma área do projeto com algumas relações   |
+| **1.800** | `--budget 1800` |          1.798 |                 **96,79%** | Investigação padrão, com contexto completo |
+| **2.400** | `--budget 2400` |          2.391 |                 **95,74%** | Relações mais distantes entre módulos      |
+
+Exemplos:
+
+```bash
+# Máxima economia para uma pergunta objetiva
+node bin/graphora.js query "onde fica a validacao de origem?" --budget 600
+
+# Equilíbrio recomendado
+node bin/graphora.js query "como o servidor chega ao dashboard?" --budget 1800
+
+# Investigação mais ampla
+node bin/graphora.js query "quais modulos participam do fluxo MCP?" --budget 2400 --depth 2
+```
+
+### Gráfico de economia
+
+```mermaid
+xychart-beta
+        title "Tokens enviados: contexto bruto x contexto Graphora"
+        x-axis ["Bruto", "600", "1000", "1800", "2400"]
+        y-axis "Tokens" 0 --> 56063
+        bar [56063, 593, 998, 1798, 2391]
+```
+
+```mermaid
+xychart-beta
+        title "Economia de contexto por orçamento"
+        x-axis ["600", "1000", "1800", "2400"]
+        y-axis "Economia (%)" 0 --> 100
+        bar [98.94, 98.22, 96.79, 95.74]
+```
+
+### Reproduza a medição
+
+```bash
+node bin/graphora.js scan .
+node bin/graphora.js query \
+    "onde o servidor inicia e como o dashboard e servido?" \
+    --budget 600 --json
+```
+
+Saída observada no projeto:
+
+```json
+{
+  "tokens": 593,
+  "budget": 600,
+  "matched": 47,
+  "truncated": true,
+  "tokenizer": "o200k_base"
+}
+```
+
+O campo `truncated: true` indica que o orçamento foi atingido. Para uma resposta sem truncamento nessa mesma pergunta, use `--budget 1800`; a medição observada foi `1.798` tokens, ainda representando `96,79%` de economia contra os `56.063` tokens do contexto bruto.
 
 ## Requisitos
 
@@ -100,7 +200,7 @@ O Graphora não exige banco de dados externo nem serviço hospedado para funcion
 ### Clonar e instalar
 
 ```bash
-git clone https://github.com/SEU_USUARIO/graphora.git
+git clone https://github.com/rm0ntoya/graphora.git
 cd graphora
 npm ci
 ```
