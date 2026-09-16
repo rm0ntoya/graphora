@@ -1,5 +1,7 @@
 # Graphora
 
+![Banner Graphora](https://i.ibb.co/MyZt4X69/Chat-GPT-Image-16-09-2026-04-35-52.png)
+
 > Inteligência local de projetos, memória persistente e observatório 3D para código.
 
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-1f6feb?logo=node.js&logoColor=white)](https://nodejs.org/)
