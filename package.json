@@ -1,0 +1,49 @@
+{
+  "name": "graphora",
+  "version": "0.1.0",
+  "description": "Local project intelligence, persistent graph memory and a 3D knowledge observatory.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "graphora": "bin/graphora.js",
+    "Graphora": "bin/graphora.js"
+  },
+  "scripts": {
+    "dev": "node bin/graphora.js serve .",
+    "build": "vite build",
+    "start": "node bin/graphora.js .",
+    "scan": "node bin/graphora.js scan .",
+    "test": "node --test test/*.test.js",
+    "test:ui": "node test/browser.mjs",
+    "install:skills": "node bin/graphora.js install --global"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "3d-force-graph": "^1.79.1",
+    "chokidar": "^4.0.3",
+    "d3-force-3d": "^3.0.6",
+    "express": "^5.1.0",
+    "gpt-tokenizer": "^3.4.0",
+    "graphology": "^0.26.0",
+    "graphology-communities-louvain": "^2.0.2",
+    "ignore": "^7.0.5",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "three": "^0.180.0",
+    "three-spritetext": "^1.10.0",
+    "typescript": "^5.9.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@vitejs/plugin-react": "^5.0.3",
+    "prettier": "^3.9.6",
+    "vite": "^7.1.5"
+  }
+}

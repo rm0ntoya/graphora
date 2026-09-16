@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "graphora": {
+      "command": "/opt/homebrew/Cellar/node/26.5.0/bin/node",
+      "args": [
+        "/Users/r.montoya/Documents/ChatGPT/Grafos/bin/graphora.js",
+        "mcp",
+        "/Users/r.montoya/Documents/ChatGPT/Grafos"
+      ]
+    }
+  }
+}
