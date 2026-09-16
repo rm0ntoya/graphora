@@ -1,7 +1,7 @@
 {
   "name": "graphora",
   "version": "0.1.0",
-  "description": "Local project intelligence, persistent graph memory and a 3D knowledge observatory.",
+  "description": "Local evidence and persistent graph memory for AI coding agents, with a 2D/3D observatory.",
   "type": "module",
   "private": true,
   "bin": {

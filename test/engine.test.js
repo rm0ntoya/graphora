@@ -4,12 +4,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { scanProject, recordMemory } from "../lib/graph.js";
-import { queryGraph, tokenCount } from "../lib/query.js";
+import { queryGraph, resolveNodeAnchor, tokenCount } from "../lib/query.js";
 import { updateNetwork } from "../lib/network.js";
 import { readJSON, writeJSON, output } from "../lib/storage.js";
 import { install, managedBlock } from "../lib/install.js";
 
-const registryHome = await fs.mkdtemp(path.join(os.tmpdir(), 'graphora-registry-'));
+const registryHome = await fs.mkdtemp(
+  path.join(os.tmpdir(), "graphora-registry-"),
+);
 process.env.GRAPHORA_HOME = registryHome;
 after(() => fs.rm(registryHome, { recursive: true, force: true }));
 
@@ -123,6 +125,10 @@ test("excludes sensitive, ignored, generated, oversized and symlink sources", as
   await fs.writeFile(path.join(root, "src", ".gitignore"), "nested/\n");
   await fs.writeFile(path.join(root, "src", "nested", "ignored.ts"), "ignored");
   await fs.writeFile(path.join(root, "large.md"), "a".repeat(1024 * 1024 + 1));
+  await fs.writeFile(
+    path.join(root, "legacy.bundle.min.js"),
+    "function bundled() {}\n",
+  );
   await fs.writeFile(path.join(base, "outside.txt"), "never index");
   await fs.symlink(path.join(base, "outside.txt"), path.join(root, "link.txt"));
   const graph = await scanProject(root);
@@ -130,6 +136,7 @@ test("excludes sensitive, ignored, generated, oversized and symlink sources", as
   assert.equal(graph.stats.skipped.sensitive, 2);
   assert.equal(graph.stats.skipped.oversized, 1);
   assert.equal(graph.stats.skipped.symlink, 1);
+  assert.equal(graph.stats.skipped.generated, 1);
   assert.ok(!JSON.stringify(graph).includes("secretsecret"));
 });
 
@@ -148,6 +155,13 @@ test("bounded queries include source citations and do not invent search matches"
     depth: 0,
   });
   assert.equal(isolated.nodes.length, 1);
+  const byPath = queryGraph(graph, "math implementation", {
+    nodeId: "src/math.ts",
+    depth: 0,
+  });
+  assert.equal(byPath.anchor.matchedBy, "path");
+  assert.match(byPath.text, /Ancora: math\.ts/);
+  assert.equal(resolveNodeAnchor(graph, "add").matchedBy, "label");
 });
 
 test("cross-project graphs stay separate, infer recurrence and never mutate discovered projects", async (t) => {
@@ -231,6 +245,15 @@ test("project integration is idempotent and preserves existing user configuratio
   assert.ok(mcp.mcpServers.graphora);
   assert.ok(
     await fs.stat(path.join(root, ".claude", "commands", "Graphora.md")),
+  );
+  assert.ok(
+    await fs.stat(path.join(root, ".codex", "skills", "graphora", "SKILL.md")),
+  );
+  assert.ok(
+    await fs.stat(path.join(root, ".github", "copilot-instructions.md")),
+  );
+  assert.ok(
+    await fs.stat(path.join(root, ".windsurf", "rules", "graphora.md")),
   );
 });
 

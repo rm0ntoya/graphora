@@ -81,6 +81,42 @@ try {
     "Orbit should move the rendered scene",
   );
   await page.getByRole("button", { name: "Parar orbita", exact: true }).click();
+  await page.getByRole("button", { name: "Ajustes do mapa" }).click();
+  await page
+    .getByRole("slider", { name: "Espessura das conexoes" })
+    .fill("1.8");
+  await page
+    .getByRole("slider", { name: "Opacidade das conexoes" })
+    .fill("1.35");
+  await page.getByRole("slider", { name: "Escala dos nos" }).fill("1.2");
+  await page.getByRole("slider", { name: "Repulsao" }).fill("1.3");
+  await page
+    .getByRole("slider", { name: "Distancia das conexoes" })
+    .fill("1.25");
+  await page.getByLabel("Cor das conexoes").selectOption("#83a6a0");
+  await page.getByLabel("Fundo do mapa").selectOption("#0b1217");
+  await page.waitForTimeout(900);
+  assert.equal(
+    await page
+      .evaluate(() =>
+        JSON.parse(localStorage.getItem("graphora:visual-settings:v1")),
+      )
+      .then((settings) => settings.edgeThickness),
+    1.8,
+  );
+  await page.getByRole("button", { name: "Fechar ajustes" }).click();
+  await page.getByRole("button", { name: "2D", exact: true }).click();
+  await page.getByTestId("graph-scene-2d").waitFor();
+  await page.waitForTimeout(1400);
+  const flat = await inspectCanvas();
+  assert.ok(flat.colored > 100, `2D graph is blank: ${JSON.stringify(flat)}`);
+  await page.screenshot({
+    path: path.join(directory, "desktop-2d.png"),
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "Ajustes do mapa" }).click();
+  await page.getByLabel("Espacamento").selectOption("spacious");
+  await page.getByRole("button", { name: "Fechar ajustes" }).click();
   await page.locator(".hub-row").first().click();
   await page.getByText("NO SELECIONADO", { exact: true }).waitFor();
   assert.ok((await page.locator(".connection").count()) > 0);

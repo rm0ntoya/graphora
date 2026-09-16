@@ -48,8 +48,8 @@ const escape = (text) =>
   );
 const endpoint = (endpoint) =>
   typeof endpoint === "object" ? endpoint.id : endpoint;
-const radiusOf = (node) =>
-  Math.max(3, Math.cbrt(Math.max(1, node.information || 100)) * 0.42);
+const radiusOf = (node, scale = 1) =>
+  Math.max(3, Math.cbrt(Math.max(1, node.information || 100)) * 0.42) * scale;
 export const GraphScene = forwardRef(function GraphScene(
   {
     data,
@@ -59,6 +59,8 @@ export const GraphScene = forwardRef(function GraphScene(
     orbit,
     frozen,
     colorMode,
+    density = "adaptive",
+    visualSettings = {},
     focus,
     onReady,
   },
@@ -69,6 +71,17 @@ export const GraphScene = forwardRef(function GraphScene(
     selection = useRef(onSelect),
     state = useRef({ selected, labels, colorMode });
   const [error, setError] = useState("");
+  const edgeThickness = visualSettings.edgeThickness ?? 1,
+    edgeOpacity = visualSettings.edgeOpacity ?? 1,
+    nodeScale = visualSettings.nodeScale ?? 1,
+    labelScale = visualSettings.labelScale ?? 1,
+    repulsion = visualSettings.repulsion ?? 1,
+    distanceScale = visualSettings.linkDistance ?? 1,
+    collisionScale = visualSettings.collision ?? 1,
+    orbitSpeed = visualSettings.orbitSpeed ?? 1,
+    particles = visualSettings.particles ?? true,
+    edgeColor = visualSettings.edgeColor || "#677277",
+    background = visualSettings.background || "#111315";
   selection.current = onSelect;
   state.current = { selected, labels, colorMode };
   useImperativeHandle(ref, () => ({
@@ -139,16 +152,16 @@ export const GraphScene = forwardRef(function GraphScene(
         .cooldownTicks(110)
         .d3AlphaDecay(0.035)
         .d3VelocityDecay(0.4);
-      engine.d3Force("charge").strength(-90).distanceMax(240);
+      engine.d3Force("charge").strength(-140).distanceMax(520);
       engine
         .d3Force("link")
         .distance((link) =>
-          ["contains", "defines"].includes(link.relation) ? 43 : 75,
+          ["contains", "defines"].includes(link.relation) ? 68 : 105,
         )
         .strength(0.2);
       engine.d3Force(
         "collision",
-        forceCollide((node) => radiusOf(node) + 4).iterations(2),
+        forceCollide((node) => radiusOf(node) + 9).iterations(3),
       );
       engine.d3Force("x", forceX((node) => node.anchorX || 0).strength(0.16));
       engine.d3Force("y", forceY((node) => node.anchorY || 0).strength(0.16));
@@ -192,6 +205,19 @@ export const GraphScene = forwardRef(function GraphScene(
       engine.graphData().nodes.map((node) => [node.id, node]),
     );
     const communities = [...new Set(data.nodes.map((node) => node.community))];
+    const count = Math.max(1, data.nodes.length);
+    const densityMultiplier =
+      density === "compact" ? 0.78 : density === "spacious" ? 1.38 : 1;
+    const spread =
+      Math.min(760, Math.max(150, 92 + Math.sqrt(count) * 17)) *
+      densityMultiplier;
+    const collisionGap =
+      Math.min(30, Math.max(9, 6 + Math.sqrt(count) * 0.62)) *
+      densityMultiplier;
+    const linkDistance =
+      Math.min(180, 66 + Math.log2(count + 1) * 11) *
+      densityMultiplier *
+      distanceScale;
     const nodes = data.nodes.map((node, index) => {
       const existing = old.get(node.id);
       const angle =
@@ -201,12 +227,20 @@ export const GraphScene = forwardRef(function GraphScene(
         2;
       return {
         ...node,
-        anchorX: Math.cos(angle) * 105,
-        anchorY: Math.sin(angle * 2) * 60,
-        anchorZ: Math.sin(angle) * 65,
-        x: existing?.x ?? Math.cos(angle) * 105 + Math.sin(index * 2.4) * 32,
-        y: existing?.y ?? Math.sin(angle * 2) * 60 + Math.cos(index * 1.7) * 30,
-        z: existing?.z ?? Math.sin(angle) * 65 + Math.cos(index * 2.4) * 32,
+        anchorX: Math.cos(angle) * spread,
+        anchorY: Math.sin(angle * 2) * spread * 0.56,
+        anchorZ: Math.sin(angle) * spread * 0.64,
+        x:
+          existing?.x ??
+          Math.cos(angle) * spread + Math.sin(index * 2.4) * collisionGap * 3,
+        y:
+          existing?.y ??
+          Math.sin(angle * 2) * spread * 0.56 +
+            Math.cos(index * 1.7) * collisionGap * 3,
+        z:
+          existing?.z ??
+          Math.sin(angle) * spread * 0.64 +
+            Math.cos(index * 2.4) * collisionGap * 3,
       };
     });
     const links = data.edges.map((edge) => ({
@@ -215,12 +249,37 @@ export const GraphScene = forwardRef(function GraphScene(
       target: endpoint(edge.target),
     }));
     engine.graphData({ nodes, links });
+    engine
+      .d3Force("charge")
+      .strength(
+        -Math.min(620, 135 + Math.sqrt(count) * 18) *
+          densityMultiplier *
+          repulsion,
+      )
+      .distanceMax(Math.min(1400, 420 + Math.sqrt(count) * 32));
+    engine
+      .d3Force("link")
+      .distance((link) =>
+        ["contains", "defines"].includes(link.relation)
+          ? linkDistance * 0.72
+          : linkDistance,
+      )
+      .strength(count > 350 ? 0.09 : 0.16);
+    engine.d3Force(
+      "collision",
+      forceCollide(
+        (node) => radiusOf(node, nodeScale) + collisionGap * collisionScale,
+      ).iterations(4),
+    );
+    engine.d3Force("x", forceX((node) => node.anchorX || 0).strength(0.1));
+    engine.d3Force("y", forceY((node) => node.anchorY || 0).strength(0.1));
+    engine.d3Force("z", forceZ((node) => node.anchorZ || 0).strength(0.1));
     const timer = setTimeout(
       () => engine.zoomToFit(900, 55),
       old.size ? 150 : 600,
     );
     return () => clearTimeout(timer);
-  }, [data]);
+  }, [data, density, repulsion, distanceScale, collisionScale, nodeScale]);
   useEffect(() => {
     const engine = graph.current;
     if (!engine) return;
@@ -247,7 +306,7 @@ export const GraphScene = forwardRef(function GraphScene(
           ? palette[(node.community || 0) % palette.length]
           : COLORS[node.kind] || "#a5b0bd";
       const active = !selected || neighbors.has(node.id);
-      const radius = radiusOf(node);
+      const radius = radiusOf(node, nodeScale);
       const material = new THREE.MeshStandardMaterial({
         color,
         roughness: 0.32,
@@ -285,7 +344,7 @@ export const GraphScene = forwardRef(function GraphScene(
           node.label.length > 30 ? node.label.slice(0, 28) + "…" : node.label,
         );
         label.color = node.id === selected ? "#efffdc" : "#c9cfce";
-        label.textHeight = node.kind === "project" ? 5.5 : 3.8;
+        label.textHeight = (node.kind === "project" ? 5.5 : 3.8) * labelScale;
         label.fontFace = "Manrope Variable, sans-serif";
         label.position.y = -(radius + 4);
         label.material.depthWrite = false;
@@ -299,28 +358,46 @@ export const GraphScene = forwardRef(function GraphScene(
         (endpoint(edge.source) === selected ||
           endpoint(edge.target) === selected)
           ? "#d4f3a3"
-          : "#677277",
+          : edgeColor,
       )
-      .linkOpacity(selected ? 0.32 : 0.24)
+      .linkOpacity(Math.min(1, (selected ? 0.36 : 0.24) * edgeOpacity))
       .linkWidth((edge) =>
         selected &&
         (endpoint(edge.source) === selected ||
           endpoint(edge.target) === selected)
-          ? 1
-          : 0.35,
+          ? edgeThickness
+          : 0.35 * edgeThickness,
       )
+      .linkDirectionalParticleWidth(1.2 * edgeThickness)
       .linkDirectionalParticles((edge) =>
+        particles &&
         selected &&
         (endpoint(edge.source) === selected ||
           endpoint(edge.target) === selected)
           ? 2
           : 0,
-      );
-  }, [data, selected, labels, colorMode]);
+      )
+      .backgroundColor(background);
+  }, [
+    data,
+    selected,
+    labels,
+    colorMode,
+    edgeThickness,
+    edgeOpacity,
+    edgeColor,
+    nodeScale,
+    labelScale,
+    particles,
+    background,
+  ]);
   useEffect(() => {
     const engine = graph.current;
-    if (engine) engine.controls().autoRotate = orbit;
-  }, [orbit]);
+    if (engine) {
+      engine.controls().autoRotate = orbit;
+      engine.controls().autoRotateSpeed = 0.32 * orbitSpeed;
+    }
+  }, [orbit, orbitSpeed]);
   useEffect(() => {
     const engine = graph.current;
     if (engine) {

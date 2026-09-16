@@ -1,33 +1,79 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import os from 'node:os';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { tokenCount } from '../lib/query.js';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { tokenCount } from "../lib/query.js";
 
-test('MCP handshake, bounded retrieval, memory and incremental deletion work across processes', async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'graphora-mcp-'));
-  await fs.writeFile(path.join(root, 'package.json'), JSON.stringify({ name: 'mcp-fixture' }));
-  await fs.writeFile(path.join(root, 'main.ts'), 'export function importantFeature() { return 42; }\n');
-  const client = new Client({ name: 'graphora-test', version: '1.0.0' });
-  const transport = new StdioClientTransport({ command: process.execPath, args: [path.resolve('bin/graphora.js'), 'mcp', root], stderr: 'pipe', env: { ...process.env, GRAPHORA_HOME: path.join(root, 'registry') } });
-  t.after(async () => { await client.close(); await fs.rm(root, { recursive: true, force: true }); });
+test("MCP handshake, bounded retrieval, memory and incremental deletion work across processes", async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "graphora-mcp-"));
+  await fs.writeFile(
+    path.join(root, "package.json"),
+    JSON.stringify({ name: "mcp-fixture" }),
+  );
+  await fs.writeFile(
+    path.join(root, "main.ts"),
+    "export function importantFeature() { return 42; }\n",
+  );
+  const client = new Client({ name: "graphora-test", version: "1.0.0" });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [path.resolve("bin/graphora.js"), "mcp", root],
+    stderr: "pipe",
+    env: { ...process.env, GRAPHORA_HOME: path.join(root, "registry") },
+  });
+  t.after(async () => {
+    await client.close();
+    await fs.rm(root, { recursive: true, force: true });
+  });
   await client.connect(transport);
   const { tools } = await client.listTools();
-  assert.ok(tools.some(tool => tool.name === 'graphora_remember'));
-  let response = await client.callTool({ name: 'graphora_query', arguments: { question: 'importantFeature', budget: 128 } });
-  let text = response.content.filter(item => item.type === 'text').map(item => item.text).join('');
-  assert.ok(tokenCount(text) <= 128); assert.match(text, /importantFeature/); assert.match(text, /main.ts/);
-  response = await client.callTool({ name: 'graphora_remember', arguments: { kind: 'decision', title: 'Pure function', text: 'Keep this function pure.', basis: 'explicit', author: 'user', sources: [{ path: 'main.ts', line: 1 }] } });
+  assert.ok(tools.some((tool) => tool.name === "graphora_remember"));
+  let response = await client.callTool({
+    name: "graphora_query",
+    arguments: { question: "importantFeature", budget: 128 },
+  });
+  let text = response.content
+    .filter((item) => item.type === "text")
+    .map((item) => item.text)
+    .join("");
+  assert.ok(tokenCount(text) <= 128);
+  assert.match(text, /importantFeature/);
+  assert.match(text, /main.ts/);
+  assert.equal(response.structuredContent.budget, 128);
+  assert.equal(typeof response.structuredContent.truncated, "boolean");
+  const inspection = await client.callTool({
+    name: "graphora_inspect",
+    arguments: { nodeId: "main.ts", limit: 10 },
+  });
+  assert.equal(inspection.structuredContent.anchor.matchedBy, "path");
+  assert.equal(inspection.structuredContent.node.path, "main.ts");
+  response = await client.callTool({
+    name: "graphora_remember",
+    arguments: {
+      kind: "decision",
+      title: "Pure function",
+      text: "Keep this function pure.",
+      basis: "explicit",
+      author: "user",
+      sources: [{ path: "main.ts", line: 1 }],
+    },
+  });
   assert.ok(!response.isError);
-  await fs.rm(path.join(root, 'main.ts'));
-  response = await client.callTool({ name: 'graphora_refresh', arguments: {} });
+  await fs.rm(path.join(root, "main.ts"));
+  response = await client.callTool({ name: "graphora_refresh", arguments: {} });
   assert.ok(!response.isError);
-  response = await client.callTool({ name: 'graphora_query', arguments: { question: 'importantFeature', budget: 600 } });
+  response = await client.callTool({
+    name: "graphora_query",
+    arguments: { question: "importantFeature", budget: 600 },
+  });
   text = response.content[0].text;
-  assert.ok(!text.includes('importantFeature'));
-  response = await client.callTool({ name: 'graphora_query', arguments: { question: 'Pure function', budget: 600 } });
+  assert.ok(!text.includes("importantFeature"));
+  response = await client.callTool({
+    name: "graphora_query",
+    arguments: { question: "Pure function", budget: 600 },
+  });
   assert.match(response.content[0].text, /DESATUALIZADO/);
 });

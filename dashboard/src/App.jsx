@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowDownToLine,
@@ -47,6 +47,7 @@ import {
   Clock3,
 } from "lucide-react";
 import { GraphScene, COLORS, LABELS } from "./GraphScene.jsx";
+import { GraphScene2D } from "./GraphScene2D.jsx";
 
 const fmt = (value) => new Intl.NumberFormat("pt-BR").format(value || 0);
 const size = (bytes) =>
@@ -72,6 +73,30 @@ const RELATIONS = {
   documented_in: "documentado em",
   uses: "utiliza",
   shares_content: "compartilha conteudo",
+};
+const VISUAL_SETTINGS_KEY = "graphora:visual-settings:v1";
+const DEFAULT_VISUAL_SETTINGS = Object.freeze({
+  edgeThickness: 1,
+  edgeOpacity: 1,
+  nodeScale: 1,
+  labelScale: 1,
+  repulsion: 1,
+  linkDistance: 1,
+  collision: 1,
+  orbitSpeed: 1,
+  particles: true,
+  edgeColor: "#677277",
+  background: "#111315",
+});
+const loadVisualSettings = () => {
+  try {
+    return {
+      ...DEFAULT_VISUAL_SETTINGS,
+      ...JSON.parse(localStorage.getItem(VISUAL_SETTINGS_KEY) || "{}"),
+    };
+  } catch {
+    return { ...DEFAULT_VISUAL_SETTINGS };
+  }
 };
 async function api(route, body) {
   const response = await fetch(
@@ -105,6 +130,28 @@ function IconButton({ icon: Icon, label, active, ...props }) {
     </button>
   );
 }
+function RangeControl({ label, value, min, max, step, unit = "x", onChange }) {
+  return (
+    <label className="range-control">
+      <span>
+        {label}
+        <output>
+          {Number(value).toFixed(step < 0.1 ? 2 : 1)}
+          {unit}
+        </output>
+      </span>
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
+  );
+}
 function Dot({ kind, color }) {
   return (
     <span
@@ -121,6 +168,49 @@ function Empty({ icon: Icon = Network, children }) {
     </div>
   );
 }
+function LineChart({ values, labels: chartLabels = [], colors = [], title }) {
+  const gradientId = `graphora-line-${useId().replaceAll(":", "")}`;
+  const safe = values.length ? values : [0];
+  const max = Math.max(1, ...safe);
+  const points = safe.map((value, index) => {
+    const x = safe.length === 1 ? 50 : 5 + (index / (safe.length - 1)) * 90;
+    const y = 38 - (value / max) * 30;
+    return { x, y, value, label: chartLabels[index], color: colors[index] };
+  });
+  const path = points
+    .map((point, index) => `${index ? "L" : "M"}${point.x},${point.y}`)
+    .join(" ");
+  return (
+    <figure className="line-chart" aria-label={title}>
+      <svg viewBox="0 0 100 46" role="img">
+        <defs>
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor="#d4f3a3" stopOpacity=".22" />
+            <stop offset="1" stopColor="#d4f3a3" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path className="line-chart-grid" d="M5 38H95 M5 23H95 M5 8H95" />
+        <path
+          className="line-chart-area"
+          style={{ fill: `url(#${gradientId})` }}
+          d={`${path} L${points.at(-1).x},40 L${points[0].x},40 Z`}
+        />
+        <path className="line-chart-path" d={path} />
+        {points.map((point, index) => (
+          <g key={`${point.label}-${index}`}>
+            <circle
+              cx={point.x}
+              cy={point.y}
+              r="1.65"
+              style={{ fill: point.color || "#d4f3a3" }}
+            />
+            <title>{`${point.label || index + 1}: ${point.value}`}</title>
+          </g>
+        ))}
+      </svg>
+    </figure>
+  );
+}
 
 export default function App() {
   const [graph, setGraph] = useState(null),
@@ -135,7 +225,10 @@ export default function App() {
   const [labels, setLabels] = useState(true),
     [orbit, setOrbit] = useState(false),
     [frozen, setFrozen] = useState(false),
-    [colorMode, setColorMode] = useState("kind");
+    [colorMode, setColorMode] = useState("kind"),
+    [mapDimension, setMapDimension] = useState("3d"),
+    [density, setDensity] = useState("adaptive"),
+    [visualSettings, setVisualSettings] = useState(loadVisualSettings);
   const [focus, setFocus] = useState(null),
     [isolated, setIsolated] = useState(false),
     [settings, setSettings] = useState(false);
@@ -164,6 +257,11 @@ export default function App() {
     setToast(message);
     setTimeout(() => setToast(""), 3500);
   };
+  const setVisualSetting = (key, value) =>
+    setVisualSettings((current) => ({ ...current, [key]: value }));
+  useEffect(() => {
+    localStorage.setItem(VISUAL_SETTINGS_KEY, JSON.stringify(visualSettings));
+  }, [visualSettings]);
   async function load() {
     try {
       const [projectData, networkData, currentStatus] = await Promise.all([
@@ -217,18 +315,32 @@ export default function App() {
     if (!modal) return;
     const previousFocus = document.activeElement;
     const dialog = document.querySelector('[role="dialog"]');
-    const elements = () => [...dialog.querySelectorAll('button:not([disabled]), input, select, textarea, a[href]')];
+    const elements = () => [
+      ...dialog.querySelectorAll(
+        "button:not([disabled]), input, select, textarea, a[href]",
+      ),
+    ];
     elements()[0]?.focus();
-    const keydown = event => {
-      if (event.key === 'Escape') setModal(null);
-      if (event.key === 'Tab') {
-        const items = elements(), first = items[0], last = items.at(-1);
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    const keydown = (event) => {
+      if (event.key === "Escape") setModal(null);
+      if (event.key === "Tab") {
+        const items = elements(),
+          first = items[0],
+          last = items.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
       }
     };
-    document.addEventListener('keydown', keydown);
-    return () => { document.removeEventListener('keydown', keydown); previousFocus?.focus(); };
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      previousFocus?.focus();
+    };
   }, [modal]);
   const activeGraph = scope === "network" ? network : graph;
   const selectedNode = activeGraph?.nodes.find((node) => node.id === selected);
@@ -449,7 +561,7 @@ export default function App() {
             >
               <item.icon size={18} strokeWidth={1.55} />
               <span>{item.label}</span>
-              {item.id === "map" && <span className="nav-count">3D</span>}
+              {item.id === "map" && <span className="nav-count">2D · 3D</span>}
               {item.id === "memory" && (
                 <span className="nav-count neutral">
                   {graph?.nodes.filter((node) =>
@@ -615,19 +727,43 @@ export default function App() {
             <div className="observatory">
               <div className="map-column">
                 <div className="map-toolbar">
-                  <div className="segmented">
-                    <button
-                      className={scope === "project" ? "active" : ""}
-                      onClick={() => changeScope("project")}
+                  <div className="map-toolbar-groups">
+                    <div className="segmented">
+                      <button
+                        className={scope === "project" ? "active" : ""}
+                        onClick={() => changeScope("project")}
+                      >
+                        Projeto
+                      </button>
+                      <button
+                        className={scope === "network" ? "active" : ""}
+                        onClick={() => changeScope("network")}
+                      >
+                        Constelacao
+                      </button>
+                    </div>
+                    <div
+                      className="segmented dimension-switch"
+                      aria-label="Dimensao do mapa"
                     >
-                      Projeto
-                    </button>
-                    <button
-                      className={scope === "network" ? "active" : ""}
-                      onClick={() => changeScope("network")}
-                    >
-                      Constelacao
-                    </button>
+                      <button
+                        className={mapDimension === "2d" ? "active" : ""}
+                        onClick={() => {
+                          setMapDimension("2d");
+                          setOrbit(false);
+                        }}
+                        aria-pressed={mapDimension === "2d"}
+                      >
+                        2D
+                      </button>
+                      <button
+                        className={mapDimension === "3d" ? "active" : ""}
+                        onClick={() => setMapDimension("3d")}
+                        aria-pressed={mapDimension === "3d"}
+                      >
+                        3D
+                      </button>
+                    </div>
                   </div>
                   <div className="toolbar-right">
                     <label className="search-field">
@@ -657,17 +793,33 @@ export default function App() {
                 </div>
                 <div className="scene-area">
                   {activeGraph ? (
-                    <GraphScene
-                      ref={scene}
-                      data={visible}
-                      selected={selected}
-                      onSelect={(node) => select(node)}
-                      labels={labels}
-                      orbit={orbit}
-                      frozen={frozen}
-                      colorMode={colorMode}
-                      focus={focus}
-                    />
+                    mapDimension === "2d" ? (
+                      <GraphScene2D
+                        ref={scene}
+                        data={visible}
+                        selected={selected}
+                        onSelect={(node) => select(node)}
+                        labels={labels}
+                        colorMode={colorMode}
+                        density={density}
+                        visualSettings={visualSettings}
+                        focus={focus}
+                      />
+                    ) : (
+                      <GraphScene
+                        ref={scene}
+                        data={visible}
+                        selected={selected}
+                        onSelect={(node) => select(node)}
+                        labels={labels}
+                        orbit={orbit}
+                        frozen={frozen}
+                        colorMode={colorMode}
+                        density={density}
+                        visualSettings={visualSettings}
+                        focus={focus}
+                      />
+                    )
                   ) : (
                     <div className="scene-loading">
                       <LoaderCircle className="spin" size={28} />
@@ -710,9 +862,15 @@ export default function App() {
                     </button>
                   )}
                   {settings && (
-                    <div className="settings-panel">
+                    <div
+                      className="settings-panel"
+                      aria-label="Personalizar mapa"
+                    >
                       <div className="panel-label">
-                        VISUALIZACAO
+                        <span>
+                          PERSONALIZAR
+                          <small>{mapDimension.toUpperCase()}</small>
+                        </span>
                         <IconButton
                           icon={X}
                           label="Fechar ajustes"
@@ -739,6 +897,139 @@ export default function App() {
                           <option value="community">Comunidade</option>
                         </select>
                       </label>
+                      <label>
+                        Espacamento
+                        <select
+                          aria-label="Espacamento"
+                          value={density}
+                          onChange={(event) => setDensity(event.target.value)}
+                        >
+                          <option value="adaptive">Adaptativo</option>
+                          <option value="compact">Compacto</option>
+                          <option value="spacious">Amplo</option>
+                        </select>
+                      </label>
+                      <div className="settings-section-title">
+                        <span>Aparencia</span>
+                        <small>tempo real</small>
+                      </div>
+                      <RangeControl
+                        label="Espessura das conexoes"
+                        value={visualSettings.edgeThickness}
+                        min="0.25"
+                        max="3"
+                        step="0.05"
+                        onChange={(value) =>
+                          setVisualSetting("edgeThickness", value)
+                        }
+                      />
+                      <RangeControl
+                        label="Opacidade das conexoes"
+                        value={visualSettings.edgeOpacity}
+                        min="0.2"
+                        max="2.5"
+                        step="0.05"
+                        onChange={(value) =>
+                          setVisualSetting("edgeOpacity", value)
+                        }
+                      />
+                      <RangeControl
+                        label="Escala dos nos"
+                        value={visualSettings.nodeScale}
+                        min="0.55"
+                        max="2.2"
+                        step="0.05"
+                        onChange={(value) =>
+                          setVisualSetting("nodeScale", value)
+                        }
+                      />
+                      <RangeControl
+                        label="Escala dos rotulos"
+                        value={visualSettings.labelScale}
+                        min="0.65"
+                        max="1.8"
+                        step="0.05"
+                        onChange={(value) =>
+                          setVisualSetting("labelScale", value)
+                        }
+                      />
+                      <label>
+                        Cor das conexoes
+                        <select
+                          aria-label="Cor das conexoes"
+                          value={visualSettings.edgeColor}
+                          onChange={(event) =>
+                            setVisualSetting("edgeColor", event.target.value)
+                          }
+                        >
+                          <option value="#677277">Grafite</option>
+                          <option value="#83a6a0">Mineral</option>
+                          <option value="#99b973">Musgo</option>
+                          <option value="#7897b7">Cobalto</option>
+                          <option value="#b89b83">Cobre</option>
+                        </select>
+                      </label>
+                      <label>
+                        Fundo do mapa
+                        <select
+                          aria-label="Fundo do mapa"
+                          value={visualSettings.background}
+                          onChange={(event) =>
+                            setVisualSetting("background", event.target.value)
+                          }
+                        >
+                          <option value="#111315">Carbono</option>
+                          <option value="#0b1217">Oceano noturno</option>
+                          <option value="#15120f">Sepia tecnica</option>
+                          <option value="#050606">Preto profundo</option>
+                        </select>
+                      </label>
+                      <div className="settings-section-title">
+                        <span>Fisica do grafo</span>
+                        <small>especialmente 3D</small>
+                      </div>
+                      <RangeControl
+                        label="Repulsao"
+                        value={visualSettings.repulsion}
+                        min="0.45"
+                        max="2.4"
+                        step="0.05"
+                        onChange={(value) =>
+                          setVisualSetting("repulsion", value)
+                        }
+                      />
+                      <RangeControl
+                        label="Distancia das conexoes"
+                        value={visualSettings.linkDistance}
+                        min="0.55"
+                        max="2.2"
+                        step="0.05"
+                        onChange={(value) =>
+                          setVisualSetting("linkDistance", value)
+                        }
+                      />
+                      <RangeControl
+                        label="Margem de colisao"
+                        value={visualSettings.collision}
+                        min="0.5"
+                        max="2.4"
+                        step="0.05"
+                        onChange={(value) =>
+                          setVisualSetting("collision", value)
+                        }
+                      />
+                      {mapDimension === "3d" && (
+                        <RangeControl
+                          label="Velocidade da orbita"
+                          value={visualSettings.orbitSpeed}
+                          min="0.25"
+                          max="2.5"
+                          step="0.05"
+                          onChange={(value) =>
+                            setVisualSetting("orbitSpeed", value)
+                          }
+                        />
+                      )}
                       <label className="toggle-row">
                         Rotulos
                         <input
@@ -747,14 +1038,42 @@ export default function App() {
                           onChange={(event) => setLabels(event.target.checked)}
                         />
                       </label>
-                      <label className="toggle-row">
-                        Orbita automatica
-                        <input
-                          type="checkbox"
-                          checked={orbit}
-                          onChange={(event) => setOrbit(event.target.checked)}
-                        />
-                      </label>
+                      {mapDimension === "3d" && (
+                        <>
+                          <label className="toggle-row">
+                            Particulas direcionais
+                            <input
+                              type="checkbox"
+                              checked={visualSettings.particles}
+                              onChange={(event) =>
+                                setVisualSetting(
+                                  "particles",
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                          </label>
+                          <label className="toggle-row">
+                            Orbita automatica
+                            <input
+                              type="checkbox"
+                              checked={orbit}
+                              onChange={(event) =>
+                                setOrbit(event.target.checked)
+                              }
+                            />
+                          </label>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className="settings-reset"
+                        onClick={() =>
+                          setVisualSettings({ ...DEFAULT_VISUAL_SETTINGS })
+                        }
+                      >
+                        <RefreshCw size={13} /> Restaurar visual
+                      </button>
                     </div>
                   )}
                   <div className="scene-tools">
@@ -774,12 +1093,14 @@ export default function App() {
                       label="Enquadrar grafo"
                       onClick={() => scene.current?.fit()}
                     />
-                    <IconButton
-                      icon={orbit ? Pause : Orbit}
-                      label={orbit ? "Parar orbita" : "Orbitar grafo"}
-                      active={orbit}
-                      onClick={() => setOrbit(!orbit)}
-                    />
+                    {mapDimension === "3d" && (
+                      <IconButton
+                        icon={orbit ? Pause : Orbit}
+                        label={orbit ? "Parar orbita" : "Orbitar grafo"}
+                        active={orbit}
+                        onClick={() => setOrbit(!orbit)}
+                      />
+                    )}
                     <IconButton
                       icon={Camera}
                       label="Exportar imagem"
@@ -798,17 +1119,20 @@ export default function App() {
                       }}
                     />
                   </div>
-                  <div className="axis-widget" aria-hidden="true">
-                    <i />
-                    <b />
-                    <span />
-                    <em>X</em>
-                    <em>Y</em>
-                    <em>Z</em>
-                  </div>
+                  {mapDimension === "3d" && (
+                    <div className="axis-widget" aria-hidden="true">
+                      <i />
+                      <b />
+                      <span />
+                      <em>X</em>
+                      <em>Y</em>
+                      <em>Z</em>
+                    </div>
+                  )}
                   <div className="map-bottom">
                     <span className="mono">
-                      <span className="status-dot" /> WEBGL / 3D
+                      <span className="status-dot" />{" "}
+                      {mapDimension === "3d" ? "WEBGL / 3D" : "CANVAS / 2D"}
                     </span>
                     <button
                       className="text-button"
@@ -1000,18 +1324,12 @@ export default function App() {
                         DISTRIBUICAO
                         <Layers3 size={13} />
                       </div>
-                      <div className="distribution-bar">
-                        {categories.map((item) => (
-                          <span
-                            key={item.kind}
-                            style={{
-                              flex: item.count,
-                              background: COLORS[item.kind],
-                            }}
-                            title={`${LABELS[item.kind]}: ${item.count}`}
-                          />
-                        ))}
-                      </div>
+                      <LineChart
+                        title="Distribuicao de entidades por tipo"
+                        values={categories.map((item) => item.count)}
+                        labels={categories.map((item) => LABELS[item.kind])}
+                        colors={categories.map((item) => COLORS[item.kind])}
+                      />
                       {categories.slice(0, 7).map((item) => (
                         <button
                           key={item.kind}
@@ -1253,6 +1571,25 @@ export default function App() {
                 <h2>Historico de analises</h2>
                 <span className="mono muted">{history.length} snapshots</span>
               </div>
+              {!!history.length && (
+                <div className="history-chart-block">
+                  <div>
+                    <span className="eyebrow">EVOLUCAO DO GRAFO</span>
+                    <strong>
+                      {fmt(history[0]?.nodes)} nos no snapshot atual
+                    </strong>
+                  </div>
+                  <LineChart
+                    title="Evolucao do numero de nos por snapshot"
+                    values={[...history].reverse().map((entry) => entry.nodes)}
+                    labels={[...history]
+                      .reverse()
+                      .map((entry) =>
+                        new Date(entry.at).toLocaleString("pt-BR"),
+                      )}
+                  />
+                </div>
+              )}
               <div className="timeline">
                 {history.map((entry, index) => (
                   <article key={entry.at}>
@@ -1301,6 +1638,14 @@ export default function App() {
                   },
                   { name: "Cursor", detail: "Regras persistentes + MCP" },
                   { name: "Gemini CLI", detail: "GEMINI.md" },
+                  {
+                    name: "GitHub Copilot",
+                    detail: "Instrucoes do repositorio",
+                  },
+                  { name: "Windsurf", detail: "Regra local persistente" },
+                  { name: "Roo Code", detail: "Regra local + CLI/MCP" },
+                  { name: "Cline", detail: "Regra local + CLI/MCP" },
+                  { name: "OpenCode", detail: "Comando de projeto" },
                   { name: "Outros clientes MCP", detail: "Servidor stdio" },
                 ].map((item, index) => (
                   <div className="integration-row" key={item.name}>
@@ -1500,6 +1845,13 @@ export default function App() {
                         ? " · Recorte limitado pelo orcamento"
                         : ""}
                     </span>
+                    {context.guidance && (
+                      <p
+                        className={`query-guidance ${context.truncated ? "warning" : ""}`}
+                      >
+                        {context.guidance}
+                      </p>
+                    )}
                   </div>
                 )}
               </form>
